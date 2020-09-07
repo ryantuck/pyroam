@@ -4,10 +4,22 @@ PyRoam
 Simple python interface for Roam Research graphs.
 
 NOTES:
-- title is the uid for notes
+- i'm calling 'pages' blocks for simplicity's sake, though subclassing would likely be cleaner.
+- title is the id for 'pages'
+- uid is the id for blocks
+- a graph is the single object entrypoint, and blocks are stored in the hierarchy from there.
 
 TODO:
 x parse [[bracket references]] and #tags and ((block refs))
+- fix the goddamn block repr
+- get typing right
+- subclassing instead of types of objects?
+- add tests!
+    - regex
+    - sample graph
+- add support for unlinked references
+- add support for networkx representation
+- more fully-featured search
 
 """
 from dataclasses import dataclass
@@ -17,38 +29,35 @@ import os
 import re
 
 FILEPATH = "~/Downloads/ryantuck.json"
+
 TAG_REGEX = r"#([A-Za-z0-9-]*)"  # NOTE: doesn't support tags with spaces
 BRACKETS_REGEX = r"\[\[([A-Za-z0-9- ]*)\]\]"
 PARENS_REGEX = r"\(\(([A-Za-z0-9- ]*)\)\)"
-
-
-
 
 
 @dataclass
 class Block:
 
     title: str
-    children: List["Block"]  # Forward reference a la PEP 484
+    children: List["Block"]  # 'Forward reference' support for recursion a la PEP 484
     uid: str
+    string: str
 
     # TODO: make these datetimes
-    edit_time: str
-    edit_email: str
-    create_time: str
-    create_email: str
-
-    # found on children only
-    string: str
-    heading: str  # NOTE: not sure what this is
+    _edit_time: str
+    _edit_email: str
+    _create_time: str
+    _create_email: str
+    _heading: str  # NOTE: not sure what this is
 
     def __post_init__(self):
-        self.child_blocks = [get_block(b) for b in self.children or []]
         self.type = "NOTE" if self.uid is None else "BLOCK"
 
         # sanity checks
         if self.title and self.string:
             raise Exception("title and string expected mutually exclusive")
+        if self.title and self.uid:
+            raise Exception("title and uid expected mutually exclusive")
 
     def text(self):
         return self.title or self.string
@@ -56,7 +65,7 @@ class Block:
     def id(self):
         return self.title or self.uid
 
-    def id_references(self):
+    def _id_references(self):
 
         return sorted(
             set(
@@ -66,66 +75,89 @@ class Block:
             )
         )
 
+    def _child_id_references(self):
+        return sorted(
+            set(match for child in self.children for match in child._id_references())
+        )
+
+    def _descendant_id_references(self):
+        return sorted(
+            set(ref for b in self.descendants() for ref in b._id_references())
+        )
+
     def references(self, graph):
         """
         Assumes graph is a list of all blocks in all pages.
         """
-        return [next(b for b in graph if b.id() == ref) for ref in self.id_references()]
-
-    def child_id_references(self):
-        return sorted(
-            set(match for child in self.child_blocks for match in child.id_references())
-        )
-
-    def descendant_blocks(self):
-        return self.child_blocks + [
-            cb for child in self.child_blocks for cb in child.child_blocks
+        return [
+            next(b for b in graph if b.id() == ref) for ref in self._id_references()
         ]
 
-    def descendant_id_references(self):
-        return sorted(
-            set(ref for b in self.descendant_blocks() for ref in b.id_references())
-        )
+    def linked_references(self, graph):
+        """
+        Return all blocks that reference this block.
+        """
+        return [b for b in graph.all_blocks() if self.id() in b.references()]
 
-
-def read(filepath):
-    user_fp = os.path.expanduser(filepath)
-    with open(user_fp) as f:
-        return json.load(f)
+    def descendants(self):
+        return self.children + [cb for child in self.children for cb in child.children]
 
 
 @dataclass
 class Graph:
 
-    blocks: List[Block]
+    filepath: str
+
+    def __post_init__(self):
+        self._data = read_graph_json_file(self.filepath)
+        self.blocks = [get_block(b) for b in self._data]
+        print(len(self.blocks))
 
     def all_blocks(self):
-        return self.blocks + [db for b in self.blocks for db in b.descendant_blocks()]
+        return self.blocks + [db for b in self.blocks for db in b.descendants()]
+
+    def get_block(self, block_id):
+        """
+        Returns Block with given `block_id`.
+        """
+        return next(b for b in self.all_blocks() if b.id() == block_id)
+
+    def search(self, query):
+        """
+        Rudimentary search for blocks containing `query` in their `text` or `id`.
+        """
+        return [b for b in self.all_blocks() if query in b.text() or query in b.id()]
+
+
+def read_graph_json_file(filepath):
+    user_fp = os.path.expanduser(filepath)
+    with open(user_fp) as f:
+        return json.load(f)
 
 
 def get_block(b: dict):
+    """
+    Return a Block object from its JSON representation.
+    """
     return Block(
         title=b.get("title"),
         uid=b.get("uid"),
-        children=b.get("children"),
+        children=[get_block(c) for c in b.get("children", [])],
         string=b.get("string"),
-
-        edit_time=b.get("edit-time"),
-        edit_email=b.get("edit-email"),
-        create_time=b.get("create-time"),
-        create_email=b.get("create-email"),
-        heading=b.get("heading"),
+        _edit_time=b.get("edit-time"),
+        _edit_email=b.get("edit-email"),
+        _create_time=b.get("create-time"),
+        _create_email=b.get("create-email"),
+        _heading=b.get("heading"),
     )
 
 
-def blocks():
-    contents = read(FILEPATH)
-    return [get_block(b) for b in contents]
+def get_graph(filepath):
+    return Graph(filepath)
 
 
 def main():
-    all_blocks = blocks()
-    g = Graph(all_blocks)
+    g = get_graph(FILEPATH)
 
 
 if __name__ == "__main__":
