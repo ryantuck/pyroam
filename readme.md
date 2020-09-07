@@ -4,9 +4,7 @@ Read your [Roam Research](https://roamresearch.com) graph as python objects.
 
 Developed with python 3.7.
 
-_Note: this is very alpha. Currently, 'pages' are treated as blocks, and there is room for improvement on the querying side of things. That being said, it does the job.
-
-For features and bugs, please raise an issue or open a PR!_
+_Note: this is very alpha. Currently, 'pages' are treated as blocks, and there is room for improvement on the querying side of things. That being said, it does the job. For features and bugs, please raise an issue or open a PR!_
 
 ## Usage
 
