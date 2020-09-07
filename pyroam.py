@@ -11,9 +11,10 @@ NOTES:
 
 TODO:
 x parse [[bracket references]] and #tags and ((block refs))
-- fix the goddamn block repr
+x fix the goddamn block repr
+- cli interface with queries, filters, etc.
 - get typing right
-- subclassing instead of types of objects?
+- more meaningful diffs between pages and blocks
 - add tests!
     - regex
     - sample graph
@@ -58,6 +59,9 @@ class Block:
             raise Exception("title and string expected mutually exclusive")
         if self.title and self.uid:
             raise Exception("title and uid expected mutually exclusive")
+
+    def __repr__(self):
+        return f'{self.type} | {self.id()} | c{len(self.children)}d{len(self.descendants())} | {self.text()}'
 
     def text(self):
         return self.title or self.string
