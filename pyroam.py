@@ -113,6 +113,14 @@ class Block:
     def descendants(self):
         return self.children() + [cb for child in self.children() for cb in child.children()]
 
+    def display(self, this_indent=0, indent=4):
+        """
+        Recursively display child blocks in outline format.
+        """
+        print(' '*this_indent, self.text())
+        for c in self.children():
+            c.display(this_indent=this_indent+indent)
+
 
 @dataclass
 class Graph:
